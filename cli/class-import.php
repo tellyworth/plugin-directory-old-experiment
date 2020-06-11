@@ -567,7 +567,7 @@ class Import {
 	 *
 	 * @return string The plugin readme.txt or readme.md filename.
 	 */
-	protected function find_readme_file( $directory ) {
+	static function find_readme_file( $directory ) {
 		$files = Filesystem::list_files( $directory, false /* non-recursive */, '!^readme\.(txt|md)$!i' );
 
 		// prioritize readme.txt
@@ -587,7 +587,7 @@ class Import {
 	 *
 	 * @return object The plugin headers.
 	 */
-	protected function find_plugin_headers( $directory ) {
+	static function find_plugin_headers( $directory ) {
 		$files = Filesystem::list_files( $directory, false, '!\.php$!i' );
 
 		if ( ! function_exists( 'get_plugin_data' ) ) {
@@ -625,7 +625,7 @@ class Import {
 	 *
 	 * @return array An array of objects representing blocks, corresponding to the block.json format where possible.
 	 */
-	protected function find_blocks_in_file( $filename ) {
+	static function find_blocks_in_file( $filename ) {
 
 		$ext = strtolower( pathinfo($filename, PATHINFO_EXTENSION) );
 
@@ -660,7 +660,7 @@ class Import {
 		if ( 'block.json' === basename( $filename ) ) {
 			// A block.json file has everything we want.
 			$blockinfo = json_decode( file_get_contents( $filename ) );
-			if ( isset( $blockinfo->name ) && isset( $blockinfo->title ) ) {
+			if ( isset( $blockinfo->name ) ) {
 				$blocks[] = $blockinfo;
 			}
 		}
@@ -676,7 +676,7 @@ class Import {
 	 *
 	 * @return array
 	 */
-	protected function extract_file_paths_from_block_json( $parsed_json, $block_json_path = '' ) {
+	static function extract_file_paths_from_block_json( $parsed_json, $block_json_path = '' ) {
 		$files = array();
 
 		$props = array( 'editorScript', 'script', 'editorStyle', 'style' );
