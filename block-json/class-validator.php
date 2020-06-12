@@ -78,10 +78,12 @@ class Validator {
 					'type' => 'string',
 				),
 				'editorScript' => array(
-					'type' => 'string',
+					'type'    => 'string',
+					'pattern' => '\.js$',
 				),
 				'editorStyle'  => array(
-					'type' => 'string',
+					'type'    => 'string',
+					'pattern' => '\.css$',
 				),
 				'example'      => array(
 					'type'                 => 'object',
@@ -108,10 +110,12 @@ class Validator {
 					),
 				),
 				'script'       => array(
-					'type' => 'string',
+					'type'    => 'string',
+					'pattern' => '\.js$',
 				),
 				'style'        => array(
-					'type' => 'string',
+					'type'    => 'string',
+					'pattern' => '\.css$',
 				),
 				'styles'       => array(
 					'type'  => 'array',
@@ -411,6 +415,26 @@ class Validator {
 			}
 		}
 
+		if ( isset( $schema['pattern'] ) ) {
+			if ( ! preg_match( '#' . $schema['pattern'] . '#', $string ) ) {
+				$pattern_description = $this->get_human_readable_pattern_description( $schema['pattern'] );
+				if ( $pattern_description ) {
+					$message = sprintf(
+						$pattern_description,
+						'<code>' . $prop . '</code>'
+					);
+				} else {
+					$message = sprintf(
+						__( 'The value of %s does not match the required pattern.', 'wporg-plugins' ),
+						'<code>' . $prop . '</code>'
+					);
+				}
+
+				$this->messages->add( 'warning', $message );
+				$this->append_error_data( $prop, 'warning' );
+			}
+		}
+
 		return true;
 	}
 
@@ -502,5 +526,27 @@ class Validator {
 		$data   = $this->messages->get_error_data( $error_code ) ?: array();
 		$data[] = $new_data;
 		$this->messages->add_data( $data, $error_code );
+	}
+
+	/**
+	 * Get a description of a regex pattern that can be understood by humans.
+	 *
+	 * @param string $pattern A regex pattern.
+	 *
+	 * @return string
+	 */
+	protected function get_human_readable_pattern_description( $pattern ) {
+		$description = '';
+
+		switch ( $pattern ) {
+			case '\.css$':
+				$description = __( 'The value of %s must end in ".css".', 'wporg-plugins' );
+				break;
+			case '\.js$':
+				$description = __( 'The value of %s must end in ".js".', 'wporg-plugins' );
+				break;
+		}
+
+		return $description;
 	}
 }
