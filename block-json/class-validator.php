@@ -314,6 +314,7 @@ class Validator {
 							)
 						);
 						$this->append_error_data( "$prop:$key", 'warning' );
+						$results[] = false;
 						continue;
 					}
 				}
