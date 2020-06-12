@@ -159,7 +159,10 @@ class Parser {
 		if ( 'No error' !== $error ) {
 			return new WP_Error(
 				'json_parse_error',
-				esc_html( $error ),
+				sprintf(
+					__( 'JSON Parser: %s', 'wporg-plugins' ),
+					esc_html( $error )
+				),
 				array(
 					'error_code' => json_last_error(),
 				)
