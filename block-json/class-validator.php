@@ -362,14 +362,16 @@ class Validator {
 
 		if ( isset( $schema['items']['type'] ) ) {
 			$results = array();
+			$index   = 0;
 
 			foreach ( $array as $item ) {
 				$results[] = $this->route_validation_for_type(
 					$schema['items']['type'],
 					$item,
-					$prop . '[]',
+					$prop . "[$index]",
 					$schema['items']
 				);
+				$index ++;
 			}
 
 			return ! in_array( false, $results, true );
