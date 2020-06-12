@@ -71,6 +71,9 @@ class Validator {
 				'category'     => array(
 					'type' => 'string',
 				),
+				'comment'      => array(
+					'type' => 'string',
+				),
 				'description'  => array(
 					'type' => 'string',
 				),
@@ -178,11 +181,16 @@ class Validator {
 	/**
 	 * Validate a PHP object representation of a block.json file.
 	 *
-	 * @param object $block_json
+	 * @param object|WP_Error $block_json
 	 *
 	 * @return bool|WP_Error
 	 */
 	public function validate( $block_json ) {
+		// A WP_Error instance is technically an object, but shouldn't be validated.
+		if ( is_wp_error( $block_json ) ) {
+			return $block_json;
+		}
+
 		$schema = self::schema();
 
 		$this->validate_object( $block_json, 'block.json', $schema );
@@ -295,17 +303,17 @@ class Validator {
 
 		if ( isset( $schema['additionalProperties'] ) ) {
 			if ( false === $schema['additionalProperties'] ) {
-				foreach ( get_object_vars( $object ) as $var ) {
-					if ( ! isset( $schema[ $var ] ) ) {
+				foreach ( array_keys( get_object_vars( $object ) ) as $key ) {
+					if ( ! isset( $schema['properties'][ $key ] ) ) {
 						$this->messages->add(
 							'warning',
 							sprintf(
 								__( '%1$s is not a valid property in the %2$s object.', 'wporg-plugins' ),
-								'<code>' . $var . '</code>',
+								'<code>' . $key . '</code>',
 								'<code>' . $prop . '</code>'
 							)
 						);
-						$this->append_error_data( "$prop:$var", 'warning' );
+						$this->append_error_data( "$prop:$key", 'warning' );
 						continue;
 					}
 				}
@@ -444,7 +452,7 @@ class Validator {
 		// There is a single valid type.
 		if ( is_string( $valid_types ) ) {
 			$method = "validate_$valid_types";
-			return $method( $value, $prop, $schema );
+			return $this->$method( $value, $prop, $schema );
 		}
 
 		// There are multiple valid types in an array.
@@ -460,7 +468,7 @@ class Validator {
 
 			if ( $check( $value ) ) {
 				$method = "validate_$type";
-				return $method( $value, $prop, $schema );
+				return $this->$method( $value, $prop, $schema );
 			}
 		}
 
