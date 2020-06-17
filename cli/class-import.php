@@ -4,6 +4,7 @@ namespace WordPressdotorg\Plugin_Directory\CLI;
 use Exception;
 use WordPressdotorg\Plugin_Directory\Jobs\API_Update_Updater;
 use WordPressdotorg\Plugin_Directory\Jobs\Tide_Sync;
+use WordPressdotorg\Plugin_Directory\Block_JSON;
 use WordPressdotorg\Plugin_Directory\Plugin_Directory;
 use WordPressdotorg\Plugin_Directory\Readme\Parser;
 use WordPressdotorg\Plugin_Directory\Template;
@@ -658,10 +659,26 @@ class Import {
 			}
 		}
 		if ( 'block.json' === basename( $filename ) ) {
-			// A block.json file has everything we want.
-			$blockinfo = json_decode( file_get_contents( $filename ) );
-			if ( isset( $blockinfo->name ) ) {
-				$blocks[] = $blockinfo;
+			// A block.json file should have everything we want.
+			$validator = new Block_JSON\Validator();
+			$block     = Block_JSON\Parser::parse( array( 'file' => $filename ) );
+			$result    = $validator->validate( $block );
+			if ( ! is_wp_error( $block ) && is_wp_error( $result ) ) {
+				// Only certain properties must be valid for our purposes here.
+				$required_valid_props = array(
+					'block.json',
+					'block.json:editorScript',
+					'block.json:editorStyle',
+					'block.json:name',
+					'block.json:script',
+					'block.json:style',
+				);
+				$invalid_props = array_intersect( $required_valid_props, $result->get_error_data( 'error' ) );
+				if ( empty( $invalid_props ) ) {
+					$blocks[] = $block;
+				}
+			} elseif ( true === $result ) {
+				$blocks[] = $block;
 			}
 		}
 
