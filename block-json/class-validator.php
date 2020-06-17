@@ -177,7 +177,7 @@ class Validator {
 					'type' => 'string',
 				),
 			),
-			'required'             => array( 'name', 'title', 'category' ),
+			'required'             => array( 'name', 'title' ),
 			'additionalProperties' => false,
 		);
 	}
