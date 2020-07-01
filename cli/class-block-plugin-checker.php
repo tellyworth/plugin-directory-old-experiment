@@ -1,8 +1,11 @@
 <?php
 namespace WordPressdotorg\Plugin_Directory\CLI;
 
-use WordPressdotorg\Plugin_Directory\Readme\Parser;
+use WordPressdotorg\Plugin_Directory\Readme\Parser as Readme_Parser;
 use WordPressdotorg\Plugin_Directory\Tools\Filesystem;
+use WordPressdotorg\Plugin_Directory\Tools\SVN;
+use WordPressdotorg\Plugin_Directory\Block_JSON\Parser as Block_JSON_Parser;
+use WordPressdotorg\Plugin_Directory\Block_JSON\Validator as Block_JSON_Validator;
 
 /**
  * A class that can examine a plugin, and evaluate and return status info that would be useful for a validator or similar tool.
@@ -14,16 +17,24 @@ use WordPressdotorg\Plugin_Directory\Tools\Filesystem;
  */
 class Block_Plugin_Checker {
 
+	protected $allowed_hosts = array(
+		'github.com',
+		'plugins.svn.wordpress.org',
+	);
+
 	protected $path_to_plugin = null;
 	protected $check_methods = array();
 	protected $results = array();
 
-	protected $slug = null;
+	public $slug = null;
+	public $repo_url = null;
+	public $repo_revision = null;
 	protected $readme_path = null;
 	protected $readme = null;
 	protected $headers = null;
 	protected $blocks = null;
 	protected $block_json_files = null;
+	protected $block_json = array();
 
 	/**
 	 * Constructor.
@@ -32,6 +43,122 @@ class Block_Plugin_Checker {
 	 */
 	public function __construct( $slug = null ) {
 		$this->slug = $slug;
+	}
+
+	/**
+	 * Check a plugin given the URL of a Subversion or GitHub repo.
+	 * Note that only hosts listed in $allowed_hosts are permitted.
+	 *
+	 * @param string $url The URL of a Subversion or GitHub repository.
+	 * @return array A list of status items.
+	 */
+	public function run_check_plugin_repo( $url ) {
+
+		// git@github.com:sortabrilliant/jumbotron.git
+
+		if ( preg_match( '#^\w+@github[.]com:(\w+/[^.]+)\.git$#', $url, $matches ) ) {
+			$url = 'https://github.com/' . $matches[1];
+		}
+
+		// Parse the URL with whitespace and trailing / trimmed
+		$url_parts = wp_parse_url( rtrim( trim( $url ), '/' ) );
+
+		if ( empty( $url_parts ) ) {
+			$this->record_result(
+				__FUNCTION__,
+				'error',
+				sprintf( __( 'Invalid url %s' ), $url ),
+				$url
+			);
+			return $this->results;
+		}
+
+		if ( empty( $url_parts['host'] ) || !in_array( $url_parts['host'], $this->allowed_hosts ) ) {
+			$this->record_result(
+				__FUNCTION__,
+				'error',
+				sprintf( __( 'URL must be GitHub or plugins.svn.wordpress.org %s' ), $url ),
+				$url
+			);
+			return $this->results;
+		}
+
+		if ( 'plugins.svn.wordpress.org' === $url_parts['host'] ) {
+			$path_parts = explode( '/', $url_parts[ 'path' ], 3 );
+			if ( empty( $path_parts[1] ) ) {
+				$this->record_result(
+					__FUNCTION__,
+					'error',
+					sprintf( __( 'URL must be a plugin repository %s' ), $url ),
+					$url
+				);
+				return $this->results;
+			}
+
+			$this->slug = $path_parts[1];
+			$url = 'https://plugins.svn.wordpress.org/' . $path_parts[1];
+			if ( 4 === count( $path_parts )
+				&& ( 'tags' === $path_parts[2] || 'branches' === $path_parts[2] )
+				&& ( !empty( $path_parts[3] ) ) ) {
+				$url .= $path_parts[2] . '/' . $path_parts[3];
+			} else {
+				$url .= '/trunk';
+			}
+		} elseif ( 'github.com' === $url_parts['host'] ) {
+			// https://github.com/sortabrilliant/jumbotron
+			// git@github.com:sortabrilliant/jumbotron.git
+			// https://github.com/sortabrilliant/jumbotron.git
+			//
+			if ( preg_match( '#^/(\w+/[^.]+)\.git#', $url_parts[ 'path' ], $matches ) ) {
+				$url = 'https://github.com/' . $matches[1] . '.git/trunk';
+			} else {
+				$this->record_result(
+					__FUNCTION__,
+					'error',
+					sprintf( __( 'URL must be a plugin repository %s' ), $url ),
+					$url
+				);
+				return $this->results;
+			}
+		}
+
+		$url = esc_url_raw( $url );
+
+		$path = $this->export_plugin( $url );
+
+		if ( $path ) {
+			$result = $this->run_check_plugin_files( $path );
+
+			// Be very very careful!
+			shell_exec( 'rm -rf ' . escapeshellarg( $path ) );	
+
+			return $result;
+		}
+		
+	}
+
+	function export_plugin( $svn_url ) {
+
+
+		// Generate a unique tmp file directory name, but don't create it.
+		if ( $this->slug ) {
+			$path = uniqid( "/tmp/blockplugin" ) . '-' . $this->slug;
+		} else {
+			$path = uniqid( "/tmp/blockplugin" );
+		}
+
+		if ( file_exists( $path ) )
+			return false;
+
+		$export = SVN::export( $svn_url, $path, array( '-rHEAD' ) );
+		if ( $export['result'] ) {
+			$this->repo_revision = $export['revision'];
+			$this->repo_url = $svn_url;
+			return $path;
+		} else {
+			return false;
+		}
+
 	}
 
 	/**
@@ -61,13 +188,25 @@ class Block_Plugin_Checker {
 	protected function prepare_data() {
 		// Parse and stash the readme data
 		$this->readme_path = Import::find_readme_file( $this->path_to_plugin );
-		$this->readme = new Parser( $this->readme_path );
+		$this->readme = new Readme_Parser( $this->readme_path );
 
 		// Parse and stash plugin headers
 		$this->headers = Import::find_plugin_headers( $this->path_to_plugin );
 
 		// Parse and stash block info
 		$this->blocks = $this->find_blocks( $this->path_to_plugin );
+
+		$this->block_json_files = Filesystem::list_files( $this->path_to_plugin, true, '!(?:^|/)block\.json$!i' );
+
+		foreach ( $this->block_json_files as $block_json_file ) {
+			$validator = new Block_JSON_Validator();
+			$block_json = Block_JSON_Parser::parse( array( 'file' => $block_json_file ) );
+			$this->block_json_validation[ $block_json_file ] = $validator->validate( $block_json );
+		}
+	}
+
+	public function relative_filename( $filename ) {
+		return str_replace( "{$this->path_to_plugin}/", '', $filename );
 	}
 
 	public function run_all_checks() {
@@ -78,10 +217,10 @@ class Block_Plugin_Checker {
 
 	public function find_blocks( $base_dir ) {
 		$block_json_files = Filesystem::list_files( $base_dir, true, '!(?:^|/)block\.json$!i' );
-		if ( ! empty( $block_json_files ) ) {
+		if ( false && ! empty( $block_json_files ) ) {
 			foreach ( $block_json_files as $filename ) {
 				$blocks_in_file = Import::find_blocks_in_file( $filename );
-				$relative_filename = str_replace( "$base_dir/", '', $filename );
+				$relative_filename = $this->relative_filename( $filename );
 				$potential_block_directories[] = dirname( $relative_filename );
 				foreach ( $blocks_in_file as $block ) {
 					$blocks[ $block->name ] = $block;
@@ -92,7 +231,7 @@ class Block_Plugin_Checker {
 			foreach ( Filesystem::list_files( $base_dir, true, '!\.(?:php|js|jsx)$!i' ) as $filename ) {
 				$blocks_in_file = Import::find_blocks_in_file( $filename );
 				if ( ! empty( $blocks_in_file ) ) {
-					$relative_filename = str_replace( "$base_dir/", '', $filename );
+					$relative_filename = $this->relative_filename( $filename );
 					$potential_block_directories[] = dirname( $relative_filename );
 					foreach ( $blocks_in_file as $block ) {
 						if ( preg_match( '!\.(?:js|jsx)$!i', $relative_filename ) && empty( $block->script ) )
@@ -144,10 +283,11 @@ class Block_Plugin_Checker {
 	 * Readme.txt file must be present.
 	 */
 	function check_readme_exists() {
-		if ( !file_exists( $this->path_to_plugin . '/readme.txt' ) ) {
+		if ( empty( $this->readme_path ) || !file_exists( $this->readme_path ) ) {
 			$this->record_result( __FUNCTION__,
 				'error',
-				__( 'Missing readme.txt file' )
+				__( 'Missing readme.txt file' ),
+				$this->relative_filename( $this->readme_path )
 			);
 		}
 	}
@@ -158,7 +298,7 @@ class Block_Plugin_Checker {
 	function check_license() {
 		if ( empty( $this->readme->license ) ) {
 			$this->record_result( __FUNCTION__,
-				'problem',
+				'warning',
 				__( 'Missing license in readme.txt.' )
 			);
 		} else {
@@ -212,7 +352,7 @@ class Block_Plugin_Checker {
 	function check_for_blocks() {
 		if ( 0 === count( $this->blocks ) ) {
 			$this->record_result( __FUNCTION__,
-				'problem',
+				'error',
 				__( 'No blocks found in plugin.' )
 			);
 		} else {
@@ -235,13 +375,14 @@ class Block_Plugin_Checker {
 					sprintf( __( 'block.json file exists for block %s' ), $block_name ),
 					$this->block_json_files[ $block_name ]
 				);
-			} else {
-				$this->record_result( __FUNCTION__,
-					'problem',
-					sprintf( __( 'Missing block.json file for block %s' ), $block_name ),
-					$block_name
-				);
 			}
+		}
+
+		if ( empty( $this->block_json_files ) ) {
+			$this->record_result( __FUNCTION__,
+				'warning',
+				__( 'No block.json files were found' )
+			);
 		}
 	}
 
@@ -260,7 +401,7 @@ class Block_Plugin_Checker {
 				);
 			} else {
 				$this->record_result( __FUNCTION__,
-					'problem',
+					'warning',
 					sprintf( __( 'No scripts found for block %s' ), $block_name ),
 					$block_name
 				);
@@ -282,10 +423,52 @@ class Block_Plugin_Checker {
 					);
 				} else {
 					$this->record_result( __FUNCTION__,
-						'problem',
+						'warning',
 						sprintf( __( 'Missing script file for block %s' ), $block_name ),
 						$script
 					);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Are the block.json files parseable?
+	 */
+	function check_block_json_is_valid_json() {
+		foreach ( $this->block_json_validation as $block_json_file => $result ) {
+			if ( is_wp_error( $result ) ) {
+				if ( $message = $result->get_error_message( 'json_parse_error' ) ) {
+					$this->record_result( __FUNCTION__,
+						'error',
+						sprintf( __( 'Error attempting to parse json in %s: %s' ), $this->relative_filename( $block_json_file ), $message ),
+						$this->relative_filename( $block_json_file )
+					);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Are the block.json files valid?
+	 */
+	function check_block_json_is_valid() {
+		foreach ( $this->block_json_validation as $block_json_file => $result ) {
+			foreach ( $result->get_error_codes() as $code ) {
+				$messages = $result->get_error_messages( $code );
+				foreach ( $messages as $i => $message ) {
+					if ( 'json_parse_error' === $code ) {
+						continue; // Already handled in check_block_json_is_valid_json
+					} else {
+						$this->record_result( __FUNCTION__,
+							( 'error' === $code ? 'warning' : $code ), // TODO: be smarter about mapping these
+							$message,
+							array( 
+								$this->relative_filename( $block_json_file ),
+								$result->get_error_data( $code )
+							)
+						);
+					}
 				}
 			}
 		}
