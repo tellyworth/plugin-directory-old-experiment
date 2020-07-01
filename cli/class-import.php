@@ -569,7 +569,7 @@ class Import {
 	 * @return string The plugin readme.txt or readme.md filename.
 	 */
 	static function find_readme_file( $directory ) {
-		$files = Filesystem::list_files( $directory, false /* non-recursive */, '!^readme\.(txt|md)$!i' );
+		$files = Filesystem::list_files( $directory, false /* non-recursive */, '!(?:^|/)readme\.(txt|md)$!i' );
 
 		// prioritize readme.txt
 		foreach ( $files as $f ) {
