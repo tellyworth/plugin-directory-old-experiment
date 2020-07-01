@@ -33,25 +33,6 @@ if ( ! class_exists( '\WordPressdotorg\Plugin_Directory\Plugin_Directory' ) ) {
 	die();
 }
 
-function fetch_plugin( $slug, $stable_tag = null ) {
-	printf( "%s\n", $plugin->slug );
-	
-	$path = uniqid( "/tmp/blockplugin" ) . '-' . $slug;
-
-	if ( file_exists( $path ) )
-		return false;
-
-	if ( $stable_tag && 'trunk' !== $stable_tag )
-		$subdir = '/tags/' . $stable_tag;
-	else
-		$subdir = '/trunk';
-
-	$cmd = "svn export " . escapeshellarg( "https://plugins.svn.wordpress.org/" . $slug . $subdir ) . " " . escapeshellarg( $path );
-	shell_exec( $cmd );
-
-	return $path;
-}
-
 if ( !empty( $opts['slug'] ) ) {
 	$args = array(
 		'post_type' => 'plugin',
@@ -84,8 +65,7 @@ if ( !empty( $opts['slug'] ) ) {
 $query = new \WP_Query( $args );
 
 $count_plugins = $count_new_plugins = $count_checked = $count_blocks = $count_block_json = 0;
-#var_dump( $query );
-#
+$good_plugins = $error_plugins = array();
 while ( $query->have_posts() ) {
 	++ $count_checked;
 	$query->the_post();
@@ -93,10 +73,10 @@ while ( $query->have_posts() ) {
 
 	echo "Checking $plugin->post_name\n";
 
-	$path = fetch_plugin( $plugin->post_name, $plugin->stable_tag );
+	$url = 'https://plugins.svn.wordpress.org/' . $plugin->post_name . '/tags/' . $plugin->stable_tag;
 
 	$checker = new Block_Plugin_Checker( $plugin->post_name );
-	$results = $checker->run_check_plugin_files( $path );
+	$results = $checker->run_check_plugin_repo( $url );
 
 	foreach ( $results as $item ) {
 		echo "$item->type\t$item->check_name\t$item->message\n";
@@ -104,9 +84,19 @@ while ( $query->have_posts() ) {
 			print_r( $item->data );
 			echo "\n";
 		}
+
+		if ( 'error' === $item->type ) {
+			$error_plugins[] = $plugin->post_name;
+		}
 	}
 
-	shell_exec( 'rm -rf ' . escapeshellarg( $path ) );
+	$error_plugins = array_unique( $error_plugins );
+	if ( !in_array( $plugin->post_name, $error_plugins ) )
+		$good_plugins[] = $plugin->post_name;
+
 }
+
+echo "Good plugins:\n" . join( "\n", $good_plugins ) . "\n\n";
+echo "Problem plugins:\n" . join( "\n", $error_plugins ) . "\n\n";
 
 echo "Checked: " . number_format( $count_checked) . "\n";
