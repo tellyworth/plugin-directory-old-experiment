@@ -68,7 +68,7 @@ class Block_Validator {
 				$output .= "<div class='notice notice-{$type} notice-alt'>\n";
 				$output .= "<ul class='{$type}'>\n";
 				foreach ( $results_by_type[ $type ] as $item ) {
-					$output .= "<li title='{$item->check_name}'>{$item->check_name}: {$item->message}</li>\n";
+					$output .= "<li title='{$item->check_name}'><a href='/hypothetical/doc/page#{$item->check_name}'><span class='dashicons dashicons-info'></span></a> {$item->message}</li>\n";
 				}
 				$output .= "</ul>\n";
 				$output .= "</div>\n";
