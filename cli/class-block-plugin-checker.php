@@ -129,10 +129,9 @@ class Block_Plugin_Checker {
 		if ( $path ) {
 			$result = $this->run_check_plugin_files( $path );
 
-			// Be very very careful!
-			shell_exec( 'rm -rf ' . escapeshellarg( $path ) );	
-
 			return $result;
+		} else {
+			return $this->results;
 		}
 		
 	}
@@ -141,21 +140,20 @@ class Block_Plugin_Checker {
 
 
 		// Generate a unique tmp file directory name, but don't create it.
-		if ( $this->slug ) {
-			$path = uniqid( "/tmp/blockplugin" ) . '-' . $this->slug;
-		} else {
-			$path = uniqid( "/tmp/blockplugin" );
-		}
+		$path = Filesystem::temp_directory( 'blockplugin' );
 
-		if ( file_exists( $path ) )
-			return false;
-
-		$export = SVN::export( $svn_url, $path, array( 'ignore-externals' ) );
+		$export = SVN::export( $svn_url, $path, array( 'ignore-externals', 'force' ) );
 		if ( $export['result'] ) {
 			$this->repo_revision = $export['revision'];
 			$this->repo_url = $svn_url;
 			return $path;
 		} else {
+			$this->record_result(
+				__FUNCTION__,
+				'error',
+				sprintf( __( 'Error fetching repository %s: %s' ), $svn_url, $export['errors'][0]['error_code'] ),
+				$export['errors']
+			);
 			return false;
 		}
 
