@@ -56,7 +56,7 @@ class Block_Plugin_Checker {
 
 		// git@github.com:sortabrilliant/jumbotron.git
 
-		if ( preg_match( '#^\w+@github[.]com:(\w+/[^.]+)\.git$#', $url, $matches ) ) {
+		if ( preg_match( '#^\w+@github[.]com:(\w+/[^.]+)(?:\.git)?$#', $url, $matches ) ) {
 			$url = 'https://github.com/' . $matches[1];
 		}
 
@@ -109,7 +109,7 @@ class Block_Plugin_Checker {
 			// git@github.com:sortabrilliant/jumbotron.git
 			// https://github.com/sortabrilliant/jumbotron.git
 			//
-			if ( preg_match( '#^/(\w+/[^.]+)\.git#', $url_parts[ 'path' ], $matches ) ) {
+			if ( preg_match( '#^/(\w+/[^.]+)(?:\.git)?$#', $url_parts[ 'path' ], $matches ) ) {
 				$url = 'https://github.com/' . $matches[1] . '.git/trunk';
 			} else {
 				$this->record_result(
