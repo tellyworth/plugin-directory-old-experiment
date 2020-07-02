@@ -194,8 +194,6 @@ class Block_Plugin_Checker {
 		// Parse and stash block info
 		$this->blocks = $this->find_blocks( $this->path_to_plugin );
 
-		$this->block_json_files = Filesystem::list_files( $this->path_to_plugin, true, '!(?:^|/)block\.json$!i' );
-
 		foreach ( $this->block_json_files as $block_json_file ) {
 			$validator = new Block_JSON_Validator();
 			$block_json = Block_JSON_Parser::parse( array( 'file' => $block_json_file ) );
@@ -214,15 +212,14 @@ class Block_Plugin_Checker {
 	}
 
 	public function find_blocks( $base_dir ) {
-		$block_json_files = Filesystem::list_files( $base_dir, true, '!(?:^|/)block\.json$!i' );
-		if ( false && ! empty( $block_json_files ) ) {
+		$this->block_json_files = Filesystem::list_files( $base_dir, true, '!(?:^|/)block\.json$!i' );
+		if ( false && ! empty( $this->block_json_files ) ) {
 			foreach ( $block_json_files as $filename ) {
 				$blocks_in_file = Import::find_blocks_in_file( $filename );
 				$relative_filename = $this->relative_filename( $filename );
 				$potential_block_directories[] = dirname( $relative_filename );
 				foreach ( $blocks_in_file as $block ) {
 					$blocks[ $block->name ] = $block;
-					$this->block_json_files[ $block->name ] = $filename;
 				}
 			}
 		} else {
