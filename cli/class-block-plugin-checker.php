@@ -150,7 +150,7 @@ class Block_Plugin_Checker {
 		if ( file_exists( $path ) )
 			return false;
 
-		$export = SVN::export( $svn_url, $path, array( '-rHEAD' ) );
+		$export = SVN::export( $svn_url, $path, array( 'ignore-externals' ) );
 		if ( $export['result'] ) {
 			$this->repo_revision = $export['revision'];
 			$this->repo_url = $svn_url;
