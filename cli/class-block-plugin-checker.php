@@ -433,6 +433,28 @@ class Block_Plugin_Checker {
 	}
 
 	/**
+	 * Does the JS call registerBlockType?
+	 */
+	function check_for_register_block_type() {
+		$block_files = array();
+		foreach ( Filesystem::list_files( $this->path_to_plugin, true, '!\.(?:js|jsx)$!i' ) as $filename ) {
+			$js = file_get_contents( $filename );
+			// TODO: need something better than this. find_blocks_in_file() misses quite a few unfortunately.
+			if ( false !== strpos( $js, 'registerBlockType' ) ) {
+				$block_files[] = $filename;
+			}
+			unset( $js );
+		}
+
+		if ( empty( $block_files ) ) {
+			$this->record_result( __FUNCTION__,
+				'error',
+				sprintf( __( 'registerBlockType() must be called in a JavaScript file' ) )
+			);
+		}
+	}
+
+	/**
 	 * Are the block.json files parseable?
 	 */
 	function check_block_json_is_valid_json() {
