@@ -34,7 +34,7 @@ class Block_Plugin_Checker {
 	protected $headers = null;
 	protected $blocks = null;
 	protected $block_json_files = null;
-	protected $block_json = array();
+	protected $block_json_validation = array();
 
 	/**
 	 * Constructor.
